@@ -63,7 +63,21 @@ with st.sidebar:
                 st.info(f"⏭️ Skipped {skipped} week(s) already in history.")
         except Exception as e:
             st.error(f"Seed failed: {e}")
-    st.caption("Click once to load historical weeks. Safe to click again — duplicates are skipped.")
+    st.caption("Click once to load the 4 historical weeks. Safe to click again — duplicates are skipped.")
+
+    st.divider()
+    st.subheader("📚 Route History")
+    if st.button("Show stored history"):
+        from db import get_all_routes_for_origin
+        for orig in ['3322', '3943']:
+            rows = get_all_routes_for_origin(orig)
+            if rows:
+                st.markdown(f"**Origin {orig}** — {len(rows)} truck(s)")
+                for r in rows:
+                    keys = ', '.join(r['stop_keys'])
+                    st.caption(f"Week {r['week_rdd']} | Rate: {'$'+str(int(r['rate'])) if r['rate'] else 'none'} | {keys}")
+            else:
+                st.caption(f"Origin {orig}: no history yet")
 
 ORIGIN_LABELS = {
     '3322': '🏭 Origin 3322 — Walnut, CA',
@@ -221,7 +235,7 @@ def build_export_excel():
             except ValueError:
                 pass
             rs = build_route_string(truck['truck_number'], truck['stops'], rate_val)
-            route_strings.append((origin, rs))
+            route_strings.append((origin, rs, rate_val))
             save_payload[origin].append({
                 'truck_number': truck['truck_number'],
                 'stops':        truck['stops'],
@@ -232,17 +246,21 @@ def build_export_excel():
     df_3943 = raw_df[raw_df[origin_col].astype(str).str.strip() == '3943'].copy()
     df_out  = pd.concat([df_3322, df_3943], ignore_index=True)
     route_col   = [''] * len(df_out)
-    routes_3322 = [rs for o, rs in route_strings if o == '3322']
-    routes_3943 = [rs for o, rs in route_strings if o == '3943']
+    rate_col    = [''] * len(df_out)
+    routes_3322 = [(rs, rv) for o, rs, rv in route_strings if o == '3322']
+    routes_3943 = [(rs, rv) for o, rs, rv in route_strings if o == '3943']
     first_3943  = len(df_3322)
-    for i, rs in enumerate(routes_3322):
+    for i, (rs, rv) in enumerate(routes_3322):
         if i < len(df_out):
             route_col[i] = rs
-    for i, rs in enumerate(routes_3943):
+            rate_col[i]  = f"${rv:,.0f}" if rv else ''
+    for i, (rs, rv) in enumerate(routes_3943):
         idx = first_3943 + i
         if idx < len(df_out):
             route_col[idx] = rs
-    df_out[''] = route_col
+            rate_col[idx]  = f"${rv:,.0f}" if rv else ''
+    df_out['Route'] = route_col
+    df_out['Rate']  = rate_col
     for origin in ['3322', '3943']:
         if save_payload[origin] and not route_exists_for_week(rdd, origin):
             save_routes(rdd, origin, save_payload[origin])
@@ -275,6 +293,10 @@ if st.session_state.step == 'upload':
                         df = pd.read_excel(uploaded)
                     df     = df.dropna(how='all')
                     orders = parse_raw_file(df)
+                    if orders:
+                        with st.expander("🔍 Debug — extracted cities (check these match history)", expanded=False):
+                            for o in orders:
+                                st.write(f"Origin {o['origin']} → **{o['city']}, {o['state']}** | {o['pallets']} pal | {o['weight']:,.0f} lbs | _{o['dest_name'][:60]}_")
                     if not orders:
                         st.error("No valid orders found. Ensure Origin Location ID column contains 3322 or 3943.")
                     else:
