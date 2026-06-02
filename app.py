@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from db import init_db, save_routes, route_exists_for_week
+from db import init_db, save_routes, route_exists_for_week, delete_all_routes
 from route_engine import (
     parse_raw_file, suggest_routes, build_route_string,
     MAX_PALLETS, MAX_WEIGHT,
@@ -64,6 +64,25 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Seed failed: {e}")
     st.caption("Click once to load the 4 historical weeks. Safe to click again — duplicates are skipped.")
+
+    if st.button("🔄 Force Re-seed (clears & re-loads all history)"):
+        try:
+            from seed_history import (
+                WEEK_530_3322, WEEK_530_3943,
+                WEEK_636_3322, WEEK_636_3943,
+            )
+            delete_all_routes()
+            datasets = [
+                ('5/30/2026',         '3322', WEEK_530_3322),
+                ('5/30/2026',         '3943', WEEK_530_3943),
+                ('6/3/2026-6/6/2026', '3322', WEEK_636_3322),
+                ('6/3/2026-6/6/2026', '3943', WEEK_636_3943),
+            ]
+            for rdd, origin, trucks in datasets:
+                save_routes(rdd, origin, trucks)
+            st.success("✅ All history cleared and re-seeded with latest data.")
+        except Exception as e:
+            st.error(f"Force re-seed failed: {e}")
 
     st.divider()
     st.subheader("📚 Route History")
