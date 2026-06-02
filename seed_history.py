@@ -37,13 +37,13 @@ WEEK_530_3322 = [
             {'city': 'Chino',      'state': 'CA', 'dest_name': 'WALMART.COM SORT CHINO LAX',  'pallets': 1, 'weight': 0},
             {'city': 'Porterville','state': 'CA', 'dest_name': 'WALMART DC #6021D-DSDC',      'pallets': 1, 'weight': 0},
             {'city': 'Red Bluff',  'state': 'CA', 'dest_name': 'WALMART DC #6026G-GENERAL',   'pallets': 1, 'weight': 0},
-            {'city': 'Hermiston',  'state': 'OR', 'dest_name': 'WALMART DC #6037D-DSDC',      'pallets': 1, 'weight': 0},
+            {'city': 'South Hermiston',  'state': 'OR', 'dest_name': 'WALMART DC #6037D-DSDC',      'pallets': 1, 'weight': 0},
         ],
         'rate': 2900,
     },
 ]
 
-# ─── Week of 5/30/2026 — Origin 3943 (Brockport, NY) ─────────────────────────
+# ─── Week of 5/30/2026 — Origin 3943(Brockport, NY) ─────────────────────────
 WEEK_530_3943 = [
     {
         'truck_number': 1,
@@ -163,7 +163,7 @@ WEEK_636_3322 = [
             {'city': 'Chino',      'state': 'CA', 'dest_name': 'WALMART.COM SORT CHINO LAX', 'pallets': 1, 'weight': 422.1},
             {'city': 'Porterville','state': 'CA', 'dest_name': 'WALMART DC #6021D-DSDC',     'pallets': 1, 'weight': 169.9},
             {'city': 'Red Bluff',  'state': 'CA', 'dest_name': 'WALMART DC #6026G-GENERAL',  'pallets': 1, 'weight': 169.5},
-            {'city': 'Hermiston',  'state': 'OR', 'dest_name': 'WALMART DC #6037D-DSDC',     'pallets': 1, 'weight': 764.8},
+            {'city': 'South Hermiston',  'state': 'OR', 'dest_name': 'WALMART DC #6037D-DSDC',     'pallets': 1, 'weight': 764.8},
         ],
         'rate': 2600,
     },
@@ -285,3 +285,4 @@ def seed():
 
 if __name__ == '__main__':
     seed()
+
