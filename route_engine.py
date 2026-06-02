@@ -8,14 +8,7 @@ TARGET_STOPS = 5
 MAX_STOPS    = 6
 
 
-# ── File parsing ───────────────────────────────────────────────────────────────
-
 def parse_raw_file(df):
-    """Parse a raw Tropicana DataFrame into a list of order dicts.
-
-    Handles files with or without Pallets / Weight columns and with or
-    without a Destination Location ID column.
-    """
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
     col_lower = {c.lower(): c for c in df.columns}
@@ -26,13 +19,13 @@ def parse_raw_file(df):
                 return v
         return None
 
-    origin_col    = find_col('origin', 'location')
-    dest_name_col = find_col('destination', 'name')
-    dest_addr_col = find_col('destination', 'address')
+    origin_col     = find_col('origin', 'location')
+    dest_name_col  = find_col('destination', 'name')
+    dest_addr_col  = find_col('destination', 'address')
     dest_state_col = find_col('destination', 'state') or find_col('destination', 'province')
-    dest_id_col   = find_col('destination', 'location', 'id')
-    pallets_col   = col_lower.get('pallets')
-    weight_col    = col_lower.get('weight')
+    dest_id_col    = find_col('destination', 'location', 'id')
+    pallets_col    = col_lower.get('pallets')
+    weight_col     = col_lower.get('weight')
 
     orders = []
     for _, row in df.iterrows():
@@ -73,15 +66,7 @@ def parse_raw_file(df):
     return orders
 
 
-# ── Route suggestion entry point ───────────────────────────────────────────────
-
 def suggest_routes(orders, rdd=None):
-    """Suggest truck routes from a list of orders.
-
-    Returns {'3322': [truck, ...], '3943': [truck, ...]}
-    Each truck dict has: truck_number, stops, historical_rate,
-                         historical_rdd, from_history
-    """
     result = {}
     for origin in ['3322', '3943']:
         origin_orders = [o for o in orders if o['origin'] == origin]
@@ -93,12 +78,9 @@ def suggest_routes(orders, rdd=None):
     return result
 
 
-# ── Internal routing logic ─────────────────────────────────────────────────────
-
 def _match_and_cluster(origin, orders):
-    """Try to match orders to historical routes; cluster the remainder."""
-    remaining = list(orders)
-    trucks    = []
+    remaining  = list(orders)
+    trucks     = []
     historical = get_all_routes_for_origin(origin)
     used_hist_sets = []
 
@@ -107,10 +89,9 @@ def _match_and_cluster(origin, orders):
             if not remaining:
                 break
 
-            hist_key_list = hist['stop_keys']  # sorted list, may have duplicates
+            hist_key_list = hist['stop_keys']
             hist_key_set  = set(hist_key_list)
 
-            # Skip if we already consumed a route with this exact stop set
             if hist_key_list in used_hist_sets:
                 continue
 
@@ -119,7 +100,6 @@ def _match_and_cluster(origin, orders):
             }
             matching_keys = hist_key_set & current_keys
 
-            # Require at least 3 matching stops (or full match if route has <3)
             min_match = min(2, len(hist_key_set))
             if len(matching_keys) < min_match:
                 continue
@@ -135,8 +115,21 @@ def _match_and_cluster(origin, orders):
             total_w = sum(o['weight']  for o in matched_orders)
 
             if total_p <= MAX_PALLETS and total_w <= MAX_WEIGHT:
+                # Reorder matched stops to follow the historical delivery sequence
+                hist_stop_order = [
+                    f"{s['city'].upper()}|{s['state'].upper()}"
+                    for s in hist['stops']
+                ]
+                def _hist_rank(o):
+                    key = f"{o['city'].upper()}|{o['state'].upper()}"
+                    try:
+                        return hist_stop_order.index(key)
+                    except ValueError:
+                        return len(hist_stop_order)
+                matched_orders = sorted(matched_orders, key=_hist_rank)
+
                 trucks.append({
-                    'stops':          matched_orders,
+                    'stops':           matched_orders,
                     'historical_rate': hist['rate'],
                     'historical_rdd':  hist['week_rdd'],
                     'from_history':    True,
@@ -145,11 +138,9 @@ def _match_and_cluster(origin, orders):
                     remaining.remove(o)
                 used_hist_sets.append(hist_key_list)
 
-    # Cluster whatever is left geographically
     geo_trucks = _geo_cluster(remaining)
     trucks.extend(geo_trucks)
 
-    # Assign final truck numbers
     for i, truck in enumerate(trucks):
         truck['truck_number'] = i + 1
 
@@ -157,11 +148,9 @@ def _match_and_cluster(origin, orders):
 
 
 def _geo_cluster(orders):
-    """Greedy nearest-neighbor clustering by state centroid."""
     if not orders:
         return []
 
-    # Start from westernmost stop and work east
     remaining = sorted(
         orders,
         key=lambda o: STATE_COORDS.get(o['state'].upper(), (39.5, -98.4))[1],
@@ -179,7 +168,7 @@ def _geo_cluster(orders):
         weight  += seed['weight']
 
         while remaining and len(stops) < MAX_STOPS:
-            last = stops[-1]
+            last      = stops[-1]
             best      = None
             best_dist = float('inf')
 
@@ -193,7 +182,6 @@ def _geo_cluster(orders):
                     best_dist = d
                     best      = o
 
-            # Stop adding if nothing fits or we've hit target and next is far
             if best is None:
                 break
             if len(stops) >= TARGET_STOPS and best_dist > 10:
@@ -205,7 +193,7 @@ def _geo_cluster(orders):
             remaining.remove(best)
 
         trucks.append({
-            'stops':          stops,
+            'stops':           stops,
             'historical_rate': None,
             'historical_rdd':  None,
             'from_history':    False,
@@ -214,17 +202,9 @@ def _geo_cluster(orders):
     return trucks
 
 
-# ── Export helpers ─────────────────────────────────────────────────────────────
-
 def build_route_string(truck_number, stops, rate=None):
-    """Build the Tropicana-format route string.
-
-    Example: 'Truck 1:  Buckeye AZ, Litchfield Park AZ, Plainview TX:  $3,000'
-    Duplicate cities are shown as 'City ST x 2'.
-    """
     city_state_list = [(s['city'], s['state']) for s in stops]
 
-    # Count occurrences of each (city, state) pair
     counts = {}
     for cs in city_state_list:
         counts[cs] = counts.get(cs, 0) + 1
