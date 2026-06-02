@@ -87,12 +87,12 @@ ORIGIN_KEYS = {'3322': 'trucks_3322', '3943': 'trucks_3943'}
 
 def _init_state():
     defaults = {
-        'step':          'upload',
-        'trucks_3322':   [],
-        'trucks_3943':   [],
-        'raw_df':        None,
-        'orders':        [],
-        'rdd':           '',
+        'step':        'upload',
+        'trucks_3322': [],
+        'trucks_3943': [],
+        'raw_df':      None,
+        'orders':      [],
+        'rdd':         '',
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -122,8 +122,8 @@ def move_to_truck(key, from_ti, si, to_num):
 def add_empty_truck(key):
     trucks = st.session_state[key]
     trucks.append({
-        'truck_number':   len(trucks) + 1,
-        'stops':          [],
+        'truck_number':    len(trucks) + 1,
+        'stops':           [],
         'historical_rate': None,
         'historical_rdd':  None,
         'from_history':    False,
@@ -293,10 +293,6 @@ if st.session_state.step == 'upload':
                         df = pd.read_excel(uploaded)
                     df     = df.dropna(how='all')
                     orders = parse_raw_file(df)
-                    if orders:
-                        with st.expander("🔍 Debug — extracted cities (check these match history)", expanded=False):
-                            for o in orders:
-                                st.write(f"Origin {o['origin']} → **{o['city']}, {o['state']}** | {o['pallets']} pal | {o['weight']:,.0f} lbs | _{o['dest_name'][:60]}_")
                     if not orders:
                         st.error("No valid orders found. Ensure Origin Location ID column contains 3322 or 3943.")
                     else:
@@ -332,6 +328,9 @@ elif st.session_state.step == 'review':
         f"**{n3943}** truck(s) from Origin 3943  |  "
         f"Max **{MAX_PALLETS} pallets** / **{MAX_WEIGHT:,} lbs** per truck"
     )
+    with st.expander("🔍 Debug — extracted cities from uploaded file"):
+        for o in st.session_state.orders:
+            st.write(f"Origin {o['origin']} → **{o['city']}, {o['state']}** | {o['pallets']} pal | {o['weight']:,.0f} lbs | _{o['dest_name'][:60]}_")
     st.divider()
     tab1, tab2 = st.tabs([ORIGIN_LABELS['3322'], ORIGIN_LABELS['3943']])
     with tab1:
