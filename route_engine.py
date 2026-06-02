@@ -120,7 +120,7 @@ def _match_and_cluster(origin, orders):
             matching_keys = hist_key_set & current_keys
 
             # Require at least 3 matching stops (or full match if route has <3)
-            min_match = min(3, len(hist_key_set))
+            min_match = min(2, len(hist_key_set))
             if len(matching_keys) < min_match:
                 continue
 
