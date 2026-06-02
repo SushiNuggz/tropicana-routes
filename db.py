@@ -157,6 +157,21 @@ def get_all_routes_for_origin(origin):
     ]
 
 
+def delete_routes_for_week(week_rdd, origin):
+    """Delete all stored routes for a specific week + origin."""
+    with _Conn() as conn:
+        conn.execute(
+            "DELETE FROM route_history WHERE week_rdd = ? AND origin = ?",
+            (week_rdd, origin),
+        )
+
+
+def delete_all_routes():
+    """Delete ALL route history (admin reset)."""
+    with _Conn() as conn:
+        conn.execute("DELETE FROM route_history")
+
+
 def route_exists_for_week(week_rdd, origin):
     """Return True if routes are already stored for this week + origin."""
     with _Conn() as conn:
