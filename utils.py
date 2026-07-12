@@ -50,8 +50,15 @@ def extract_city(address, state):
         city_words.insert(0, w)
 
     if city_words:
-        return ' '.join(city_words).title()
-    return words[-1].title() if words else 'Unknown'
+        city = ' '.join(city_words).title()
+    else:
+        city = words[-1].title() if words else 'Unknown'
+
+    # Normalize known aliases
+    if city.upper() == 'HERMISTON' and state.upper() == 'OR':
+        city = 'South Hermiston'
+
+    return city
 
 
 def geo_distance(state1, state2):
