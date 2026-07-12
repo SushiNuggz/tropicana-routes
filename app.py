@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import io
 from db import init_db, save_routes, route_exists_for_week, delete_all_routes
 from route_engine import (
     parse_raw_file, suggest_routes, build_route_string,
@@ -43,12 +42,21 @@ with st.sidebar:
             from seed_history import (
                 WEEK_530_3322, WEEK_530_3943,
                 WEEK_636_3322, WEEK_636_3943,
+                WEEK_624_3322, WEEK_624_3943,
+                WEEK_71_3322,  WEEK_71_3943,
+                WEEK_78_3322,  WEEK_78_3943,
             )
             datasets = [
-                ('5/30/2026',         '3322', WEEK_530_3322),
-                ('5/30/2026',         '3943', WEEK_530_3943),
-                ('6/3/2026-6/6/2026', '3322', WEEK_636_3322),
-                ('6/3/2026-6/6/2026', '3943', WEEK_636_3943),
+                ('5/30/2026',            '3322', WEEK_530_3322),
+                ('5/30/2026',            '3943', WEEK_530_3943),
+                ('6/3/2026-6/6/2026',   '3322', WEEK_636_3322),
+                ('6/3/2026-6/6/2026',   '3943', WEEK_636_3943),
+                ('6/24/2026-6/27/2026', '3322', WEEK_624_3322),
+                ('6/24/2026-6/27/2026', '3943', WEEK_624_3943),
+                ('7/1/2026-7/4/2026',   '3322', WEEK_71_3322),
+                ('7/1/2026-7/4/2026',   '3943', WEEK_71_3943),
+                ('7/8/2026-7/11/2026',  '3322', WEEK_78_3322),
+                ('7/8/2026-7/11/2026',  '3943', WEEK_78_3943),
             ]
             seeded = skipped = 0
             for rdd, origin, trucks in datasets:
@@ -63,20 +71,29 @@ with st.sidebar:
                 st.info(f"⏭️ Skipped {skipped} week(s) already in history.")
         except Exception as e:
             st.error(f"Seed failed: {e}")
-    st.caption("Click once to load the 4 historical weeks. Safe to click again — duplicates are skipped.")
+    st.caption("Click once to load all historical weeks. Safe to click again — duplicates are skipped.")
 
     if st.button("🔄 Force Re-seed (clears & re-loads all history)"):
         try:
             from seed_history import (
                 WEEK_530_3322, WEEK_530_3943,
                 WEEK_636_3322, WEEK_636_3943,
+                WEEK_624_3322, WEEK_624_3943,
+                WEEK_71_3322,  WEEK_71_3943,
+                WEEK_78_3322,  WEEK_78_3943,
             )
             delete_all_routes()
             datasets = [
-                ('5/30/2026',         '3322', WEEK_530_3322),
-                ('5/30/2026',         '3943', WEEK_530_3943),
-                ('6/3/2026-6/6/2026', '3322', WEEK_636_3322),
-                ('6/3/2026-6/6/2026', '3943', WEEK_636_3943),
+                ('5/30/2026',            '3322', WEEK_530_3322),
+                ('5/30/2026',            '3943', WEEK_530_3943),
+                ('6/3/2026-6/6/2026',   '3322', WEEK_636_3322),
+                ('6/3/2026-6/6/2026',   '3943', WEEK_636_3943),
+                ('6/24/2026-6/27/2026', '3322', WEEK_624_3322),
+                ('6/24/2026-6/27/2026', '3943', WEEK_624_3943),
+                ('7/1/2026-7/4/2026',   '3322', WEEK_71_3322),
+                ('7/1/2026-7/4/2026',   '3943', WEEK_71_3943),
+                ('7/8/2026-7/11/2026',  '3322', WEEK_78_3322),
+                ('7/8/2026-7/11/2026',  '3943', WEEK_78_3943),
             ]
             for rdd, origin, trucks in datasets:
                 save_routes(rdd, origin, trucks)
@@ -106,12 +123,12 @@ ORIGIN_KEYS = {'3322': 'trucks_3322', '3943': 'trucks_3943'}
 
 def _init_state():
     defaults = {
-        'step':        'upload',
-        'trucks_3322': [],
-        'trucks_3943': [],
-        'raw_df':      None,
-        'orders':      [],
-        'rdd':         '',
+        'step':          'upload',
+        'trucks_3322':   [],
+        'trucks_3943':   [],
+        'raw_df':        None,
+        'orders':        [],
+        'rdd':           '',
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -235,60 +252,10 @@ def render_origin_editor(origin):
         add_empty_truck(key)
         st.rerun()
 
-def build_export_excel():
-    raw_df = st.session_state.raw_df.copy()
-    rdd    = st.session_state.rdd
-    route_strings = []
-    save_payload  = {'3322': [], '3943': []}
-    for origin in ['3322', '3943']:
-        key = ORIGIN_KEYS[origin]
-        for truck in st.session_state[key]:
-            if not truck['stops']:
-                continue
-            rate_key = f"rate_{key}_{truck['truck_number']}"
-            raw_rate = st.session_state.get(rate_key, '')
-            rate_val = None
-            try:
-                if raw_rate:
-                    rate_val = float(str(raw_rate).replace('$', '').replace(',', ''))
-            except ValueError:
-                pass
-            rs = build_route_string(truck['truck_number'], truck['stops'], rate_val)
-            route_strings.append((origin, rs, rate_val))
-            save_payload[origin].append({
-                'truck_number': truck['truck_number'],
-                'stops':        truck['stops'],
-                'rate':         rate_val,
-            })
-    origin_col = str(raw_df.columns[0])
-    df_3322 = raw_df[raw_df[origin_col].astype(str).str.strip() == '3322'].copy()
-    df_3943 = raw_df[raw_df[origin_col].astype(str).str.strip() == '3943'].copy()
-    df_out  = pd.concat([df_3322, df_3943], ignore_index=True)
-    route_col   = [''] * len(df_out)
-    rate_col    = [''] * len(df_out)
-    routes_3322 = [(rs, rv) for o, rs, rv in route_strings if o == '3322']
-    routes_3943 = [(rs, rv) for o, rs, rv in route_strings if o == '3943']
-    first_3943  = len(df_3322)
-    for i, (rs, rv) in enumerate(routes_3322):
-        if i < len(df_out):
-            route_col[i] = rs
-            rate_col[i]  = f"${rv:,.0f}" if rv else ''
-    for i, (rs, rv) in enumerate(routes_3943):
-        idx = first_3943 + i
-        if idx < len(df_out):
-            route_col[idx] = rs
-            rate_col[idx]  = f"${rv:,.0f}" if rv else ''
-    df_out['Route'] = route_col
-    df_out['Rate']  = rate_col
-    for origin in ['3322', '3943']:
-        if save_payload[origin] and not route_exists_for_week(rdd, origin):
-            save_routes(rdd, origin, save_payload[origin])
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-        df_out.to_excel(writer, index=False)
-    buf.seek(0)
-    return buf.getvalue()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 1 — Upload
+# ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.step == 'upload':
     st.subheader("Step 1 — Upload Tropicana Order File")
     col1, col2 = st.columns([2, 1])
@@ -313,7 +280,10 @@ if st.session_state.step == 'upload':
                     df     = df.dropna(how='all')
                     orders = parse_raw_file(df)
                     if not orders:
-                        st.error("No valid orders found. Ensure Origin Location ID column contains 3322 or 3943.")
+                        st.error(
+                            "No valid orders found. "
+                            "Ensure Origin Location ID column contains 3322 or 3943."
+                        )
                     else:
                         suggestions = suggest_routes(orders, rdd_input)
                         st.session_state.raw_df      = df
@@ -329,6 +299,10 @@ if st.session_state.step == 'upload':
                     st.error(f"Error reading file: {e}")
                     st.exception(e)
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2 — Review & Edit
+# ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.step == 'review':
     hdr_l, hdr_r = st.columns([5, 2])
     hdr_l.subheader(f"Step 2 — Review Routes  |  RDD: {st.session_state.rdd}")
@@ -337,7 +311,7 @@ elif st.session_state.step == 'review':
         if ca.button("← Start Over"):
             st.session_state.step = 'upload'
             st.rerun()
-        if cb.button("✅ Finalize & Export", type="primary"):
+        if cb.button("✅ Finalize & Copy", type="primary"):
             st.session_state.step = 'export'
             st.rerun()
     n3322 = len(st.session_state.trucks_3322)
@@ -357,33 +331,28 @@ elif st.session_state.step == 'review':
     with tab2:
         render_origin_editor('3943')
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 3 — Finalize & Copy
+# ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.step == 'export':
-    st.subheader("Step 3 — Export")
+    st.subheader("Step 3 — Finalize & Copy Routes")
+
     if st.button("← Back to Review"):
         st.session_state.step = 'review'
         st.rerun()
-    with st.spinner("Building Excel file…"):
-        try:
-            excel_bytes = build_export_excel()
-            rdd_safe    = st.session_state.rdd.replace('/', '.').replace(',', '_').replace(' ', '')
-            filename = f"Tropicana_Walmart_Routes_RDD_{rdd_safe}.xlsx"
-            st.success("✅ Routes saved to history and file is ready to download!")
-            st.download_button(
-                label="📥 Download Completed Excel",
-                data=excel_bytes,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-        except Exception as e:
-            st.error(f"Export error: {e}")
-            st.exception(e)
-    st.divider()
-    st.subheader("Route Summary")
-    for origin in ['3322', '3943']:
-        key    = ORIGIN_KEYS[origin]
-        trucks = st.session_state[key]
-        if any(t['stops'] for t in trucks):
-            st.markdown(f"**{ORIGIN_LABELS[origin]}**")
+
+    try:
+        rdd          = st.session_state.rdd
+        save_payload = {'3322': [], '3943': []}
+        lines        = ["TQYL rates and routes below:", ""]
+
+        for origin, label in [('3322', 'Walnut, CA OB:'), ('3943', 'Brockport, NY OB:')]:
+            key    = ORIGIN_KEYS[origin]
+            trucks = st.session_state[key]
+            if not any(t['stops'] for t in trucks):
+                continue
+            lines.append(label)
             for truck in trucks:
                 if not truck['stops']:
                     continue
@@ -395,4 +364,30 @@ elif st.session_state.step == 'export':
                         rate_val = float(str(raw_rate).replace('$', '').replace(',', ''))
                 except ValueError:
                     pass
-                st.write(f"• {build_route_string(truck['truck_number'], truck['stops'], rate_val)}")
+                rs = build_route_string(truck['truck_number'], truck['stops'], rate_val)
+                lines.append(rs)
+                save_payload[origin].append({
+                    'truck_number': truck['truck_number'],
+                    'stops':        truck['stops'],
+                    'rate':         rate_val,
+                })
+            lines.append("")
+
+        email_text = "\n".join(lines).strip()
+
+        st.success("✅ Routes ready — select all text below and paste into your email to Dale/Carl.")
+        st.text_area(
+            "📋 Copy and paste into email:",
+            value=email_text,
+            height=420,
+            key="_email_out",
+        )
+
+        for origin in ['3322', '3943']:
+            if save_payload[origin] and not route_exists_for_week(rdd, origin):
+                save_routes(rdd, origin, save_payload[origin])
+        st.caption("✓ Routes saved to history for future weeks.")
+
+    except Exception as e:
+        st.error(f"Error building routes: {e}")
+        st.exception(e)
