@@ -256,7 +256,6 @@ def render_origin_editor(origin):
             rate_key = f"rate_{key}_{truck['truck_number']}"
             c_rate.text_input(
                 "Rate ($)",
-                value=st.session_state.get(rate_key, ""),
                 key=rate_key,
                 placeholder="Enter rate",
             )
