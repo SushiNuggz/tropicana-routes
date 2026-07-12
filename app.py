@@ -219,7 +219,7 @@ def render_origin_editor(origin):
                 ]
 
                 for si, stop in enumerate(truck['stops']):
-                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 2, 1])
+                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 3, 1])
                     c1.write(
                         f"**{si + 1}.** {stop['city']}, {stop['state']}"
                         f"  —  _{stop.get('dest_name', '')[:50]}_"
@@ -241,7 +241,7 @@ def render_origin_editor(origin):
                             label_visibility="collapsed",
                             format_func=lambda n: f"→ Truck {n}",
                         )
-                        if c5.button("Move", key=f"mv_{key}_{ti}_{si}"):
+                        if c5.button("→", key=f"mv_{key}_{ti}_{si}"):
                             move_to_truck(key, ti, si, dest_num)
                             st.rerun()
 
@@ -281,7 +281,7 @@ def render_origin_editor(origin):
 if st.session_state.step == 'upload':
     st.subheader("Step 1 — Upload Tropicana Order File")
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 2])
     with col1:
         uploaded = st.file_uploader(
             "Upload the Excel (.xlsx) or CSV file from Tropicana",
@@ -344,6 +344,14 @@ elif st.session_state.step == 'review':
             st.session_state.step = 'upload'
             st.rerun()
         if cb.button("✅ Finalize & Copy", type="primary"):
+            # Save all rates NOW before widgets disappear on step switch
+            captured = {}
+            for orig in ['3322', '3943']:
+                k = ORIGIN_KEYS[orig]
+                for truck in st.session_state[k]:
+                    rk = f"rate_{k}_{truck['truck_number']}"
+                    captured[rk] = st.session_state.get(rk, '')
+            st.session_state['_captured_rates'] = captured
             st.session_state.step = 'export'
             st.rerun()
 
@@ -393,7 +401,7 @@ elif st.session_state.step == 'export':
                 if not truck['stops']:
                     continue
                 rate_key = f"rate_{key}_{truck['truck_number']}"
-                raw_rate = st.session_state.get(rate_key, '')
+                raw_rate = st.session_state.get('_captured_rates', {}).get(rate_key, '')
                 rate_val = None
                 try:
                     if raw_rate:
