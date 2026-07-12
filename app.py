@@ -219,7 +219,7 @@ def render_origin_editor(origin):
                 ]
 
                 for si, stop in enumerate(truck['stops']):
-                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 3, 1])
+                    c1, c2, c3, c4 = st.columns([5, 1, 1, 3])
                     c1.write(
                         f"**{si + 1}.** {stop['city']}, {stop['state']}"
                         f"  —  _{stop.get('dest_name', '')[:50]}_"
@@ -234,15 +234,16 @@ def render_origin_editor(origin):
                         st.rerun()
 
                     if other_nums:
-                        dest_num = c4.selectbox(
+                        options = ["Move to…"] + other_nums
+                        sel = c4.selectbox(
                             "Move to",
-                            other_nums,
+                            options,
                             key=f"sel_{key}_{ti}_{si}",
                             label_visibility="collapsed",
-                            format_func=lambda n: f"→ Truck {n}",
+                            format_func=lambda n: n if n == "Move to…" else f"→ Truck {n}",
                         )
-                        if c5.button("→", key=f"mv_{key}_{ti}_{si}"):
-                            move_to_truck(key, ti, si, dest_num)
+                        if sel != "Move to…":
+                            move_to_truck(key, ti, si, sel)
                             st.rerun()
 
             st.divider()
