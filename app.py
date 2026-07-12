@@ -6,6 +6,7 @@ from route_engine import (
     MAX_PALLETS, MAX_WEIGHT,
 )
 
+# ── Password gate ──────────────────────────────────────────────────────────────
 def _check_password():
     if st.session_state.get("authenticated"):
         return
@@ -27,6 +28,7 @@ def _check_password():
 
 _check_password()
 
+# ── App bootstrap ──────────────────────────────────────────────────────────────
 init_db()
 st.set_page_config(
     page_title="Tropicana Route Builder",
@@ -35,6 +37,7 @@ st.set_page_config(
 )
 st.title("🍊 Tropicana Walmart Route Builder")
 
+# ── Sidebar: seed history (one-time admin action) ─────────────────────────────
 with st.sidebar:
     st.subheader("⚙️ Admin")
     if st.button("🌱 Seed historical routes"):
@@ -121,6 +124,8 @@ ORIGIN_LABELS = {
 }
 ORIGIN_KEYS = {'3322': 'trucks_3322', '3943': 'trucks_3943'}
 
+
+# ── Session state ──────────────────────────────────────────────────────────────
 def _init_state():
     defaults = {
         'step':          'upload',
@@ -136,53 +141,65 @@ def _init_state():
 
 _init_state()
 
+
+# ── Truck editing helpers ──────────────────────────────────────────────────────
 def move_up(key, ti, si):
     stops = st.session_state[key][ti]['stops']
     if si > 0:
         stops[si - 1], stops[si] = stops[si], stops[si - 1]
+
 
 def move_down(key, ti, si):
     stops = st.session_state[key][ti]['stops']
     if si < len(stops) - 1:
         stops[si], stops[si + 1] = stops[si + 1], stops[si]
 
+
 def move_to_truck(key, from_ti, si, to_num):
     trucks = st.session_state[key]
     stop   = trucks[from_ti]['stops'].pop(si)
     to_ti  = next(i for i, t in enumerate(trucks) if t['truck_number'] == to_num)
     trucks[to_ti]['stops'].append(stop)
+    # Drop empty trucks and renumber
     st.session_state[key] = [t for t in trucks if t['stops']]
     for i, t in enumerate(st.session_state[key]):
         t['truck_number'] = i + 1
 
+
 def add_empty_truck(key):
     trucks = st.session_state[key]
     trucks.append({
-        'truck_number':    len(trucks) + 1,
-        'stops':           [],
+        'truck_number':   len(trucks) + 1,
+        'stops':          [],
         'historical_rate': None,
         'historical_rdd':  None,
         'from_history':    False,
     })
 
+
+# ── Truck editor UI ────────────────────────────────────────────────────────────
 def render_origin_editor(origin):
     key    = ORIGIN_KEYS[origin]
     trucks = st.session_state[key]
+
     if not trucks:
         st.info(f"No orders found for origin {origin}.")
         return
+
     for ti, truck in enumerate(trucks):
         total_p = sum(s.get('pallets', 1) for s in truck['stops'])
         total_w = sum(s.get('weight',  0) for s in truck['stops'])
         over_p  = total_p > MAX_PALLETS
         over_w  = total_w > MAX_WEIGHT
         status  = "🔴" if (over_p or over_w) else "✅"
+
         hist_hint = ""
         if truck.get('historical_rate'):
             hist_hint = (
                 f"  |  📋 {truck.get('historical_rdd', 'prev week')}"
                 f" — ${truck['historical_rate']:,.0f}"
             )
+
         label = (
             f"{status} Truck {truck['truck_number']}"
             f"  —  {len(truck['stops'])} stops"
@@ -190,6 +207,7 @@ def render_origin_editor(origin):
             f"  |  {total_w:,.0f} lbs"
             f"{hist_hint}"
         )
+
         with st.expander(label, expanded=True):
             if not truck['stops']:
                 st.caption("_Empty truck — move stops here from another truck_")
@@ -199,21 +217,26 @@ def render_origin_editor(origin):
                     t['truck_number'] for t in trucks
                     if t['truck_number'] != truck['truck_number']
                 ]
+
                 for si, stop in enumerate(truck['stops']):
                     c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 2, 1])
                     c1.write(
                         f"**{si + 1}.** {stop['city']}, {stop['state']}"
                         f"  —  _{stop.get('dest_name', '')[:50]}_"
                     )
-                    if c2.button("↑", key=f"up_{key}_{ti}_{si}", disabled=(si == 0)):
+                    if c2.button("↑", key=f"up_{key}_{ti}_{si}",
+                                 disabled=(si == 0)):
                         move_up(key, ti, si)
                         st.rerun()
-                    if c3.button("↓", key=f"dn_{key}_{ti}_{si}", disabled=(si == len(truck['stops']) - 1)):
+                    if c3.button("↓", key=f"dn_{key}_{ti}_{si}",
+                                 disabled=(si == len(truck['stops']) - 1)):
                         move_down(key, ti, si)
                         st.rerun()
+
                     if other_nums:
                         dest_num = c4.selectbox(
-                            "Move to", other_nums,
+                            "Move to",
+                            other_nums,
                             key=f"sel_{key}_{ti}_{si}",
                             label_visibility="collapsed",
                             format_func=lambda n: f"→ Truck {n}",
@@ -221,22 +244,21 @@ def render_origin_editor(origin):
                         if c5.button("Move", key=f"mv_{key}_{ti}_{si}"):
                             move_to_truck(key, ti, si, dest_num)
                             st.rerun()
+
             st.divider()
+
             if over_p:
                 st.error(f"⚠️ Over pallet limit: {total_p:.0f} / {MAX_PALLETS}")
             if over_w:
                 st.error(f"⚠️ Over weight limit: {total_w:,.0f} / {MAX_WEIGHT:,} lbs")
+
             c_rate, c_hint = st.columns([2, 4])
-            rate_key     = f"rate_{key}_{truck['truck_number']}"
-            default_rate = (
-                f"{truck['historical_rate']:,.0f}"
-                if truck.get('historical_rate') else ""
-            )
+            rate_key = f"rate_{key}_{truck['truck_number']}"
             c_rate.text_input(
                 "Rate ($)",
-                value=st.session_state.get(rate_key, default_rate),
+                value=st.session_state.get(rate_key, ""),
                 key=rate_key,
-                placeholder="e.g. 2800",
+                placeholder="Enter rate",
             )
             if truck.get('historical_rate') and truck.get('historical_rdd'):
                 c_hint.caption(
@@ -247,6 +269,7 @@ def render_origin_editor(origin):
                 c_hint.caption("✓ Route matched from history — no rate on file")
             else:
                 c_hint.caption("📍 New route (no prior history)")
+
     st.divider()
     if st.button(f"➕ Add empty truck for {origin}", key=f"add_{key}"):
         add_empty_truck(key)
@@ -258,6 +281,7 @@ def render_origin_editor(origin):
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.step == 'upload':
     st.subheader("Step 1 — Upload Tropicana Order File")
+
     col1, col2 = st.columns([2, 1])
     with col1:
         uploaded = st.file_uploader(
@@ -269,6 +293,7 @@ if st.session_state.step == 'upload':
             "RDD (from the email)",
             placeholder="e.g.  6/3/2026   or   6/3/2026, 6/6/2026",
         )
+
     if uploaded and rdd_input:
         if st.button("🔄 Generate Routes", type="primary"):
             with st.spinner("Parsing file and generating routes…"):
@@ -277,8 +302,10 @@ if st.session_state.step == 'upload':
                         df = pd.read_csv(uploaded)
                     else:
                         df = pd.read_excel(uploaded)
+
                     df     = df.dropna(how='all')
                     orders = parse_raw_file(df)
+
                     if not orders:
                         st.error(
                             "No valid orders found. "
@@ -291,10 +318,14 @@ if st.session_state.step == 'upload':
                         st.session_state.rdd         = rdd_input
                         st.session_state.trucks_3322 = suggestions.get('3322', [])
                         st.session_state.trucks_3943 = suggestions.get('3943', [])
+
+                        # Clear stale rate inputs from prior sessions
                         for k in [k for k in st.session_state if k.startswith('rate_')]:
                             del st.session_state[k]
+
                         st.session_state.step = 'review'
                         st.rerun()
+
                 except Exception as e:
                     st.error(f"Error reading file: {e}")
                     st.exception(e)
@@ -305,7 +336,9 @@ if st.session_state.step == 'upload':
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.step == 'review':
     hdr_l, hdr_r = st.columns([5, 2])
-    hdr_l.subheader(f"Step 2 — Review Routes  |  RDD: {st.session_state.rdd}")
+    hdr_l.subheader(
+        f"Step 2 — Review Routes  |  RDD: {st.session_state.rdd}"
+    )
     with hdr_r:
         ca, cb = st.columns(2)
         if ca.button("← Start Over"):
@@ -314,6 +347,7 @@ elif st.session_state.step == 'review':
         if cb.button("✅ Finalize & Copy", type="primary"):
             st.session_state.step = 'export'
             st.rerun()
+
     n3322 = len(st.session_state.trucks_3322)
     n3943 = len(st.session_state.trucks_3943)
     st.caption(
@@ -321,10 +355,13 @@ elif st.session_state.step == 'review':
         f"**{n3943}** truck(s) from Origin 3943  |  "
         f"Max **{MAX_PALLETS} pallets** / **{MAX_WEIGHT:,} lbs** per truck"
     )
+
     with st.expander("🔍 Debug — extracted cities from uploaded file"):
         for o in st.session_state.orders:
             st.write(f"Origin {o['origin']} → **{o['city']}, {o['state']}** | {o['pallets']} pal | {o['weight']:,.0f} lbs | _{o['dest_name'][:60]}_")
+
     st.divider()
+
     tab1, tab2 = st.tabs([ORIGIN_LABELS['3322'], ORIGIN_LABELS['3943']])
     with tab1:
         render_origin_editor('3322')
@@ -383,6 +420,7 @@ elif st.session_state.step == 'export':
             key="_email_out",
         )
 
+        # Save to history once per week per origin
         for origin in ['3322', '3943']:
             if save_payload[origin] and not route_exists_for_week(rdd, origin):
                 save_routes(rdd, origin, save_payload[origin])
