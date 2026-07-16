@@ -235,21 +235,26 @@ def render_origin_editor(origin):
 
                     if other_nums:
                         options = ["Move to…"] + other_nums
-                        sel = c4.selectbox(
+                        sel_key = f"sel_{key}_{ti}_{si}"
+
+                        def make_handler(_key, _ti, _si, _sel_key):
+                            def handler():
+                                to_num = st.session_state.get(_sel_key, "Move to…")
+                                if to_num != "Move to…":
+                                    for sk in [k for k in list(st.session_state.keys())
+                                               if k.startswith("sel_")]:
+                                        del st.session_state[sk]
+                                    move_to_truck(_key, _ti, _si, to_num)
+                            return handler
+
+                        c4.selectbox(
                             "Move to",
                             options,
-                            key=f"sel_{key}_{ti}_{si}",
+                            key=sel_key,
                             label_visibility="collapsed",
                             format_func=lambda n: n if n == "Move to…" else f"→ Truck {n}",
+                            on_change=make_handler(key, ti, si, sel_key),
                         )
-                        if sel != "Move to…":
-                            # Clear ALL selectbox states across the whole page
-                            # before moving — prevents cascade from index shifts
-                            for sk in [sk for sk in st.session_state
-                                       if sk.startswith("sel_")]:
-                                del st.session_state[sk]
-                            move_to_truck(key, ti, si, sel)
-                            st.rerun()
 
             st.divider()
 
