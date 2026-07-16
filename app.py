@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import uuid
 from db import init_db, save_routes, route_exists_for_week, delete_all_routes
 from route_engine import (
     parse_raw_file, suggest_routes, build_route_string,
@@ -142,6 +143,14 @@ def _init_state():
 _init_state()
 
 
+def _assign_stop_ids(key):
+    """Ensure every stop has a permanent unique _sid."""
+    for truck in st.session_state[key]:
+        for stop in truck['stops']:
+            if '_sid' not in stop:
+                stop['_sid'] = str(uuid.uuid4())
+
+
 # ── Truck editing helpers ──────────────────────────────────────────────────────
 def move_up(key, ti, si):
     stops = st.session_state[key][ti]['stops']
@@ -155,10 +164,21 @@ def move_down(key, ti, si):
         stops[si], stops[si + 1] = stops[si + 1], stops[si]
 
 
-def move_to_truck(key, from_ti, si, to_num):
+def move_to_truck_by_id(key, stop_sid, to_num):
+    """Find stop by its permanent ID and move it — safe after any renumbering."""
     trucks = st.session_state[key]
-    stop   = trucks[from_ti]['stops'].pop(si)
-    to_ti  = next(i for i, t in enumerate(trucks) if t['truck_number'] == to_num)
+    from_ti = from_si = None
+    for ti, truck in enumerate(trucks):
+        for si, s in enumerate(truck['stops']):
+            if s.get('_sid') == stop_sid:
+                from_ti, from_si = ti, si
+                break
+        if from_ti is not None:
+            break
+    if from_ti is None:
+        return
+    stop = trucks[from_ti]['stops'].pop(from_si)
+    to_ti = next(i for i, t in enumerate(trucks) if t['truck_number'] == to_num)
     trucks[to_ti]['stops'].append(stop)
     # Drop empty trucks and renumber
     st.session_state[key] = [t for t in trucks if t['stops']]
@@ -234,17 +254,18 @@ def render_origin_editor(origin):
                         st.rerun()
 
                     if other_nums:
-                        options = ["Move to…"] + other_nums
-                        sel_key = f"sel_{key}_{ti}_{si}"
+                        options  = ["Move to…"] + other_nums
+                        sel_key  = f"sel_{key}_{stop['_sid']}"
+                        stop_sid = stop['_sid']
 
-                        def make_handler(_key, _ti, _si, _sel_key):
+                        def make_handler(_key, _stop_sid, _sel_key):
                             def handler():
                                 to_num = st.session_state.get(_sel_key, "Move to…")
                                 if to_num != "Move to…":
                                     for sk in [k for k in list(st.session_state.keys())
                                                if k.startswith("sel_")]:
                                         del st.session_state[sk]
-                                    move_to_truck(_key, _ti, _si, to_num)
+                                    move_to_truck_by_id(_key, _stop_sid, to_num)
                             return handler
 
                         c4.selectbox(
@@ -253,7 +274,7 @@ def render_origin_editor(origin):
                             key=sel_key,
                             label_visibility="collapsed",
                             format_func=lambda n: n if n == "Move to…" else f"→ Truck {n}",
-                            on_change=make_handler(key, ti, si, sel_key),
+                            on_change=make_handler(key, stop_sid, sel_key),
                         )
 
             st.divider()
@@ -328,6 +349,10 @@ if st.session_state.step == 'upload':
                         st.session_state.rdd         = rdd_input
                         st.session_state.trucks_3322 = suggestions.get('3322', [])
                         st.session_state.trucks_3943 = suggestions.get('3943', [])
+
+                        # Assign permanent unique IDs to every stop
+                        _assign_stop_ids('trucks_3322')
+                        _assign_stop_ids('trucks_3943')
 
                         # Clear stale rate inputs from prior sessions
                         for k in [k for k in st.session_state if k.startswith('rate_')]:
