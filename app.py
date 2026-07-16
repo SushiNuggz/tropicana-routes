@@ -243,6 +243,11 @@ def render_origin_editor(origin):
                             format_func=lambda n: n if n == "Move to…" else f"→ Truck {n}",
                         )
                         if sel != "Move to…":
+                            # Clear ALL selectbox states across the whole page
+                            # before moving — prevents cascade from index shifts
+                            for sk in [sk for sk in st.session_state
+                                       if sk.startswith("sel_")]:
+                                del st.session_state[sk]
                             move_to_truck(key, ti, si, sel)
                             st.rerun()
 
